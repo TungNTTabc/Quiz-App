@@ -2,7 +2,11 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+<<<<<<< HEAD
     font-family:'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+=======
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+>>>>>>> 82fb791d269baa96cb9750edd624782b8b0c5796
 }
 body{
     min-height: 700px;
