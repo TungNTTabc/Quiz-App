@@ -190,6 +190,7 @@ select{
     align-items:flex-start;
     gap:100px;
 }
+
 .leaderboard{
     width:400px;
     background:#1f2847;
@@ -198,19 +199,23 @@ select{
     color:white;
     box-shadow:0 0 10px gray;
 }
+
 .leaderboard h2{
     text-align:center;
     margin-bottom:20px;
 }
+
 #leaderboard-list{
     list-style:none;
 }
+
 #leaderboard-list li{
     padding:8px;
     border-bottom:1px solid #3f4868;
     display:flex;
     justify-content:space-between;
 }
+
 .note-board{
     width:400px;
     background:#1f2847;
@@ -219,10 +224,12 @@ select{
     color:white;
     box-shadow:0 0 10px gray;
 }
+
 .note-board h2{
     text-align:center;
     margin-bottom:15px;
 }
+
 #note-text{
     width:100%;
     height: 322px;
@@ -232,10 +239,12 @@ select{
     resize:none;
     margin-bottom:10px;
 }
+
 .note-buttons{
     display:flex;
     gap:10px;
 }
+
 .note-buttons button{
     flex:1;
     padding:10px;
@@ -245,6 +254,7 @@ select{
     border-radius:5px;
     cursor:pointer;
 }
+
 .note-buttons button:hover{
     background:#0a6bc5;
 }
