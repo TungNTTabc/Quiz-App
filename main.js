@@ -131,7 +131,7 @@ const showQuestion = (question) => {
         });
     });
     time = timePerQuestion.value;
-    startTimer(time)
+    startTimer(time-1)
 };
 const startTimer = (time) =>{
     timer = setInterval(() =>{
