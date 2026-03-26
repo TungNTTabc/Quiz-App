@@ -1,244 +1,332 @@
-const progressBar = document.querySelector(".progress-bar"),
-    progressText = document.querySelector(".progress-text");
-const progress = (value) => {
-    const percentage = (value/time)*100;
-    progressBar.style.width = `${percentage}%`;
-    progressText.innerHTML = `${value}`;
+const screens = {
+    welcome: document.getElementById('screen-welcome'),
+    register: document.getElementById('screen-register'),
+    login: document.getElementById('screen-login'),
+    start: document.getElementById('screen-start'),
+    quiz: document.getElementById('screen-quiz'),
+    end: document.getElementById('screen-end'),
+};
+function showScreen(name) {
+    Object.values(screens).forEach(s => s.classList.add('hide'));
+    screens[name].classList.remove('hide');
 }
-let questions = [],
-    time = 30,
-    score = 0,
-    currentQuestion,
-    timer;
-const startBtn = document.querySelector(".start"),
-    numQuestions = document.querySelector("#num-questions"),
-    category = document.querySelector("#category"),
-    difficulty = document.querySelector("#difficulty"),
-    timePerQuestion = document.querySelector("#time"),
-    quiz = document.querySelector(".quiz"),
-    startscreen = document.querySelector(".start-screen");
-// const startQuiz = () =>{
-//     const num = numQuestions.value;
-//     cat = category.value;
-//     diff = difficulty.value;
-//     const api = `https://opentdb.com/api.php?
-//     amount=${num}&category=${cat}&difficulty=${diff}&type=multiple`
-//     fetch(api)
-//         .then((res) => res.json())
-//         .then((data) => {
-//             questions = data.results;
-//             startscreen.classList.add("hide");
-//             quiz.classList.remove("hide");
-//             currentQuestion = 1;
-//             showQuestion(questions[0]);
-//         });
-// };
+
+function getUsers() { return JSON.parse(localStorage.getItem('quiz_users') || '{}'); }
+function saveUsers(u) { localStorage.setItem('quiz_users', JSON.stringify(u)); }
+
+let currentUser = null;
+
+document.getElementById('btn-go-register').addEventListener('click', () => showScreen('register'));
+document.getElementById('btn-go-login').addEventListener('click', () => showScreen('login'));
+
+document.getElementById('btn-register').addEventListener('click', () => {
+    const u = document.getElementById('reg-username').value.trim();
+    const p = document.getElementById('reg-password').value.trim();
+    const err = document.getElementById('reg-error');
+    if (!u || !p) { err.textContent = 'Please fill in both fields'; err.classList.remove('hide'); return; }
+    const users = getUsers();
+    if (users[u]) { err.textContent = 'Your username/password has already been used'; err.classList.remove('hide'); return; }
+    users[u] = { password: p, stats: { correct: 0, wrong: 0, total: 0 } };
+    saveUsers(users);
+    err.classList.add('hide');
+    document.getElementById('reg-username').value = '';
+    document.getElementById('reg-password').value = '';
+    showScreen('welcome');
+});
+document.getElementById('btn-reg-return').addEventListener('click', () => {
+    document.getElementById('reg-error').classList.add('hide');
+    showScreen('welcome');
+});
+
+document.getElementById('btn-login').addEventListener('click', () => {
+    const u = document.getElementById('login-username').value.trim();
+    const p = document.getElementById('login-password').value.trim();
+    const err = document.getElementById('login-error');
+    const users = getUsers();
+    if (!users[u] || users[u].password !== p) { err.classList.remove('hide'); return; }
+    err.classList.add('hide');
+    currentUser = u;
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    enterStartScreen();
+});
+document.getElementById('btn-login-return').addEventListener('click', () => {
+    document.getElementById('login-error').classList.add('hide');
+    showScreen('welcome');
+});
+
+function enterStartScreen() {
+    loadNotes();
+    renderStats();
+    showScreen('start');
+}
+
+function renderStats() {
+    const users = getUsers();
+    const content = document.getElementById('stats-content');
+    const entries = Object.entries(users).filter(([, v]) => v.stats && v.stats.total > 0);
+    if (entries.length === 0) {
+        content.innerHTML = '<p style="color:#a2aace;font-size:13px;text-align:center;margin-top:10px;">No data yet. Play a game!</p>';
+        return;
+    }
+    content.innerHTML = entries.map(([name, data]) => {
+        const s = data.stats;
+        const pct = Math.round((s.correct / s.total) * 100);
+        return `
+        <div class="stat-item">
+            <div class="stat-username">${name}</div>
+            <div class="stat-bar-track">
+                <div class="stat-bar-correct" style="width:${pct}%"></div>
+                <div class="stat-bar-wrong" style="width:${100 - pct}%"></div>
+            </div>
+            <div class="stat-pct">${pct}% correct</div>
+            <div class="stat-total">${s.total} questions answered</div>
+        </div>`;
+    }).join('');
+}
+
+function loadNotes() {
+    const val = localStorage.getItem('quiz_note') || '';
+    document.getElementById('note-text').value = val;
+    document.getElementById('note-text-quiz').value = val;
+}
+document.getElementById('save-note').addEventListener('click', () => {
+    localStorage.setItem('quiz_note', document.getElementById('note-text').value);
+});
+document.getElementById('hide-note').addEventListener('click', () => {
+    const t = document.getElementById('note-text'), btn = document.getElementById('hide-note');
+    if (t.style.display === 'none') { t.style.display = 'block'; btn.textContent = 'Hide'; }
+    else { t.style.display = 'none'; btn.textContent = 'Show'; }
+});
+document.getElementById('save-note-quiz').addEventListener('click', () => {
+    localStorage.setItem('quiz_note', document.getElementById('note-text-quiz').value);
+});
+document.getElementById('hide-note-quiz').addEventListener('click', () => {
+    const t = document.getElementById('note-text-quiz'), btn = document.getElementById('hide-note-quiz');
+    if (t.style.display === 'none') { t.style.display = 'block'; btn.textContent = 'Hide'; }
+    else { t.style.display = 'none'; btn.textContent = 'Show'; }
+});
+
+const progressBar = document.querySelector('.progress-bar');
+const progressText = document.querySelector('.progress-text');
+const submitBtn = document.querySelector('.submit');
+const nextBtn = document.querySelector('.next');
+
+let questions = [], timePerQ = 30, score = 0, currentQuestion = 0, timer;
+
+const numQEl = document.getElementById('num-questions');
+const categoryEl = document.getElementById('category');
+const diffEl = document.getElementById('difficulty');
+const timeEl = document.getElementById('time');
+
+const progress = (value) => {
+    const pct = (value / timePerQ) * 100;
+    progressBar.style.width = pct + '%';
+    progressText.innerHTML = value;
+};
+
+document.getElementById('btn-start').addEventListener('click', startQuiz);
+
+async function startQuiz() {
+    const num = numQEl.value;
+    const cat = categoryEl.value;
+    const diff = diffEl.value;
+    timePerQ = parseInt(timeEl.value) || 30;
+    score = 0;
+    currentQuestion = 0;
+
+    if (+cat < '9' && cat !== '') {
+        const data = await loadPreparedQuestions();
+        questions = data.slice(0, num);
+    } else {
+        try {
+            const api = `https://opentdb.com/api.php?amount=${num}${cat ? '&category=' + cat : ''}${diff ? '&difficulty=' + diff : ''}&type=multiple`;
+            const res = await fetch(api);
+            const json = await res.json();
+            questions = json.results;
+        } catch {
+            alert('Failed to load questions. Check your connection or try a different category.');
+            return;
+        }
+    }
+
+    if (!questions || questions.length === 0) {
+        alert('No questions available. Try different settings.');
+        return;
+    }
+
+    document.getElementById('note-text-quiz').value = document.getElementById('note-text').value;
+    loadLeaderboard();
+    showScreen('quiz');
+    showQuestion(questions[0]);
+}
+
 const loadPreparedQuestions = async () => {
-    const res = await fetch("questions.txt");
+    const cat = categoryEl.value;
+    if (cat === '1') {
+        const res = await fetch('questions.txt');
+    } else {
+        alert('Failed to load questions. Check your connection or try a different category.');
+        return;
+    }
     const text = await res.text();
-    const lines = text.split("\n");
-    let parsedQuestions = [];
-    let currentQuestion = null;
+    const lines = text.split('\n');
+    let parsed = [], cur = null;
     lines.forEach(line => {
         line = line.trim();
         if (!line) return;
-        if (line.startsWith("Câu")) {
-            if (currentQuestion) {
-                parsedQuestions.push(currentQuestion);
-            }
-            currentQuestion = {
-                question: line.replace("Câu", "").trim(),
-                correct_answer: "",
-                incorrect_answers: []
-            };
-        } else if (line.includes(":)))")) {
-            currentQuestion.correct_answer = line.replace(":)))", "").trim();
-        } else if (line.includes(":(((")) {
-            currentQuestion.incorrect_answers.push(
-                line.replace(":(((", "").trim()
-            );
+        if (line.startsWith('Câu')) {
+            if (cur) parsed.push(cur);
+            cur = { question: line.replace('Câu', '').trim(), correct_answer: '', incorrect_answers: [] };
+        } else if (line.includes(':)))')) {
+            cur.correct_answer = line.replace(':)))', '').trim();
+        } else if (line.includes(':(((')) {
+            cur.incorrect_answers.push(line.replace(':(((', '').trim());
         }
     });
-    if (currentQuestion) {
-        parsedQuestions.push(currentQuestion);
-    }
-    return parsedQuestions.sort(() => Math.random() - 0.5);
+    if (cur) parsed.push(cur);
+    return parsed.sort(() => Math.random() - 0.5);
 };
-const startQuiz = async () => {
-    const num = numQuestions.value;
-    const cat = category.value;
-    const diff = difficulty.value;
-    if (cat == "1") {
-        const data = await loadPreparedQuestions();
-        questions = data.slice(0, num);
-        startscreen.classList.add("hide");
-        quiz.classList.remove("hide");
-        currentQuestion = 1;
-        showQuestion(questions[0]);
-    } else {
-        const api = `https://opentdb.com/api.php?amount=${num}&category=${cat}&difficulty=${diff}&type=multiple`;
-        fetch(api)
-            .then(res => res.json())
-            .then(data => {
-                questions = data.results;
-                startscreen.classList.add("hide");
-                quiz.classList.remove("hide");
-                currentQuestion = 1;
-                showQuestion(questions[0]);
-            });
-    }
-    loadLeaderboard();
-};
-startBtn.addEventListener("click", startQuiz);
-const submitBtn = document.querySelector(".submit"),
-    nextBtn = document.querySelector(".next");
+
 const showQuestion = (question) => {
-    const questionText = document.querySelector(".question"),
-    answersWapper = document.querySelector(".answer-wapper"),
-    questionNumber = document.querySelector(".number");
+    const questionText = document.querySelector('.question');
+    const answersWapper = document.querySelector('.answer-wapper');
+    const questionNumber = document.querySelector('.number');
+
     questionText.innerHTML = question.question;
-    const answers = [
-        ...question.incorrect_answers,
-        question.correct_answer.toString(),
-    ];
-    answers.sort(() => Math.random()-0.5);
-    answersWapper.innerHTML = "";
-    answers.forEach((answer) => {
+
+    const answers = [...question.incorrect_answers, question.correct_answer.toString()]
+        .sort(() => Math.random() - 0.5);
+
+    answersWapper.innerHTML = '';
+    answers.forEach(answer => {
         answersWapper.innerHTML += `
-            <div class="answer ">
+            <div class="answer">
                 <span class="text">${answer}</span>
-                <span class="checkbox">
-                    <span class="icon">✓</span>
-                </span>
-            </div>
-        `;
+                <span class="checkbox"><span class="icon">✓</span></span>
+            </div>`;
     });
-    questionNumber.innerHTML = `
-        Question <span class="current">${
-            questions.indexOf(question) + 1
-        }</span><span class="total">/${questions.length}</span>
-    `;
-    const answersDiv = document.querySelectorAll(".answer");
-    answersDiv.forEach((answer) => {
-        answer.addEventListener("click", () =>{
-            if (!answer.classList.contains("checked")) {
-                answersDiv.forEach((answer) => {
-                    answer.classList.remove("selected");
-                });
-                answer.classList.add("selected");
+
+    questionNumber.innerHTML = `Question <span class="current">${questions.indexOf(question) + 1}</span><span class="total">/${questions.length}</span>`;
+
+    document.querySelectorAll('.answer').forEach(ans => {
+        ans.addEventListener('click', () => {
+            if (!ans.classList.contains('checked')) {
+                document.querySelectorAll('.answer').forEach(a => a.classList.remove('selected'));
+                ans.classList.add('selected');
                 submitBtn.disabled = false;
-            };
+            }
         });
     });
-    time = timePerQuestion.value;
-    startTimer(time-1)
+
+    submitBtn.disabled = true;
+    submitBtn.style.display = 'block';
+    nextBtn.style.display = 'none';
+
+    startTimer(timePerQ);
 };
-const startTimer = (time) =>{
-    timer = setInterval(() =>{
-        if (time >= 0) {
-            progress(time);
-            time--;
-        } else {
-            checkAnswer();
-        }
+
+const startTimer = (t) => {
+    clearInterval(timer);
+    let remaining = t;
+    progress(remaining);
+    timer = setInterval(() => {
+        remaining--;
+        if (remaining >= 0) { progress(remaining); }
+        else { clearInterval(timer); checkAnswer(); }
     }, 1000);
 };
-submitBtn.addEventListener("click",() => {
-    checkAnswer();
-});
+
+submitBtn.addEventListener('click', () => { checkAnswer(); });
+
 const checkAnswer = () => {
     clearInterval(timer);
-    const selectedAnswer = document.querySelector(".answer.selected");
-    const correct = questions[currentQuestion - 1].correct_answer;
+    const selectedAnswer = document.querySelector('.answer.selected');
+    const correct = questions[currentQuestion].correct_answer;
+
     if (selectedAnswer) {
-        const answerText = selectedAnswer.querySelector(".text").textContent;
-        if (answerText === correct) {
-            score++;
-            selectedAnswer.classList.add("correct");
-        } else {
-            selectedAnswer.classList.add("wrong");
-            document.querySelectorAll(".answer").forEach((answer) => {
-                if (answer.querySelector(".text").textContent === correct) {
-                    answer.classList.add("correct");
-                }
+        const txt = selectedAnswer.querySelector('.text').textContent;
+        if (txt === correct) { score++; selectedAnswer.classList.add('correct'); }
+        else {
+            selectedAnswer.classList.add('wrong');
+            document.querySelectorAll('.answer').forEach(a => {
+                if (a.querySelector('.text').textContent === correct) a.classList.add('correct');
             });
         }
     } else {
-        document.querySelectorAll(".answer").forEach((answer) => {
-            if (answer.querySelector(".text").textContent === correct) {
-                answer.classList.add("correct");
-            }
+        document.querySelectorAll('.answer').forEach(a => {
+            if (a.querySelector('.text').textContent === correct) a.classList.add('correct');
         });
     }
-    document.querySelectorAll(".answer").forEach((answer) => {
-        answer.classList.add("checked");
-    });
-    submitBtn.style.display = "none";
-    nextBtn.style.display = "block";
+
+    document.querySelectorAll('.answer').forEach(a => a.classList.add('checked'));
+    submitBtn.style.display = 'none';
+    nextBtn.style.display = 'block';
 };
-nextBtn.addEventListener("click", () =>{
-    nextQuestion();
-    submitBtn.style.display = "block";
-    nextBtn.style.display = "none";
-});
-const nextQuestion = () =>{
+
+nextBtn.addEventListener('click', () => {
+    currentQuestion++;
+    submitBtn.style.display = 'block';
+    nextBtn.style.display = 'none';
     if (currentQuestion < questions.length) {
-        currentQuestion++;
-        showQuestion(questions[currentQuestion-1]);
+        showQuestion(questions[currentQuestion]);
     } else {
         showScore();
     }
-}
-const endScreen = document.querySelector(".end-screen"),
-    finalScore = document.querySelector(".final-score"),
-    totalScore = document.querySelector(".total-score");
-const restartBtn = document.querySelector(".restart");
-restartBtn.addEventListener("click", () =>{
-    window.location.reload();
 });
-function getLeaderboardKey(){
-    return `leaderboard_${numQuestions.value}_${category.value}_${difficulty.value}_${timePerQuestion.value}`;
+
+function lbKey() {
+    return `leaderboard_${numQEl.value}_${categoryEl.value}_${diffEl.value}_${timeEl.value}`;
 }
-function saveScore(){
-    const key = getLeaderboardKey();
+function saveToLeaderboard() {
+    const key = lbKey();
     let scores = JSON.parse(localStorage.getItem(key)) || [];
     scores.push(score);
-    scores.sort((a,b)=> b-a);
-    scores = scores.slice(0,10);
+    scores.sort((a, b) => b - a);
+    scores = scores.slice(0, 10);
     localStorage.setItem(key, JSON.stringify(scores));
 }
-function loadLeaderboard(){
-    const key = getLeaderboardKey();
-    let scores = JSON.parse(localStorage.getItem(key)) || [];
-    const list = document.getElementById("leaderboard-list");
-    list.innerHTML = "";
-    scores.forEach((s,i)=>{
-        const li = document.createElement("li");
-        li.innerHTML = `<span>#${i+1}</span> <span>${s}</span>`;
+function loadLeaderboard() {
+    const scores = JSON.parse(localStorage.getItem(lbKey())) || [];
+    const list = document.getElementById('leaderboard-list');
+    list.innerHTML = '';
+    if (scores.length === 0) {
+        list.innerHTML = '<li style="color:#576081;font-size:13px;border:none;">No scores yet</li>';
+        return;
+    }
+    scores.forEach((s, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>#${i + 1}</span><span>${s}</span>`;
         list.appendChild(li);
     });
 }
+
 const showScore = () => {
-    endScreen.classList.remove("hide");
-    quiz.classList.add("hide");
-    finalScore.innerHTML = score;
-    totalScore.innerHTML = `/ ${questions.length}`;
-    saveScore();
-    loadLeaderboard();
-}
-const noteText = document.getElementById("note-text");
-const saveNote = document.getElementById("save-note");
-noteText.value = localStorage.getItem("quiz_note") || "";
-saveNote.addEventListener("click", () => {
-    localStorage.setItem("quiz_note", noteText.value);
-});
-const hideNoteBtn = document.getElementById("hide-note");
-hideNoteBtn.addEventListener("click", () => {
-    if (noteText.style.display === "none") {
-        noteText.style.display = "block";
-        hideNoteBtn.textContent = "Hide";
-    } else {
-        noteText.style.display = "none";
-        hideNoteBtn.textContent = "Show";
+    clearInterval(timer);
+    const total = questions.length;
+
+    document.querySelector('.final-score').innerHTML = score;
+    document.querySelector('.total-score').innerHTML = `/ ${total}`;
+
+    saveToLeaderboard();
+
+    if (currentUser) {
+        const users = getUsers();
+        if (users[currentUser]) {
+            users[currentUser].stats.correct += score;
+            users[currentUser].stats.wrong += (total - score);
+            users[currentUser].stats.total += total;
+            saveUsers(users);
+        }
     }
+
+    showScreen('end');
+};
+
+document.querySelector('.restart').addEventListener('click', () => {
+    clearInterval(timer);
+    score = 0; currentQuestion = 0; questions = [];
+    enterStartScreen();
 });
+
+showScreen('welcome');
